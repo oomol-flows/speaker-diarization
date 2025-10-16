@@ -1,0 +1,11 @@
+{
+  "oomol": "这是一个为 OOMOL 平台构建的说话人分离工具包。说话人分离是自动识别和标记音频录音中\"谁在什么时候说话\"的过程。",
+  "speaker-diarization": "说话人区分",
+  "test-speaker-diarization": "测试说话人分离",
+  "speaker-diarization2": "说话人分离",
+  "this-block-performs-speaker-diarization-on-audio-files-identifyi": "此模块对音频文件进行说话人分离，使用 ModelScope 的 3D-Speaker 模型，通过时间戳识别并标记不同的说话人。",
+  "input-audio-file-for-speaker-diarization": "输入音频文件进行说话人分离",
+  "pre-specified-number-of-speakers-optional-leave-empty-for-automa": "预先指定的说话人数（可选，留空则自动检测）",
+  "enable-overlap-detection-for-overlapping-speech-segments": "启用重叠检测以识别重叠语音片段",
+  "output-format-for-diarization-results": "说话人分离结果的输出格式"
+}

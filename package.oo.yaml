@@ -5,3 +5,8 @@ scripts:
     npm install
     poetry install --no-root
 icon: ./icon.png
+name: speaker-diarization
+repository: https://github.com/oomol-flows/speaker-diarization
+releaseNotes: init
+displayName: "%speaker-diarization%"
+description: "%oomol%"

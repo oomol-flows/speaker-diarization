@@ -1,4 +1,4 @@
-title: Test Speaker Diarization
+title: "%test-speaker-diarization%"
 nodes:
   - node_id: speaker-diarization#1
     task: self::speaker-diarization

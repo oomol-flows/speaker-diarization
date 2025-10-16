@@ -1,0 +1,11 @@
+{
+  "oomol": "This is a speaker diarization toolkit built for the OOMOL platform. Speaker diarization is the process of automatically identifying and marking \"who spoke when\" in audio recordings.",
+  "speaker-diarization": "Speaker Diarization",
+  "test-speaker-diarization": "Test Speaker Diarization",
+  "speaker-diarization2": "Speaker Diarization",
+  "this-block-performs-speaker-diarization-on-audio-files-identifyi": "This block performs speaker diarization on audio files, identifying and labeling different speakers with timestamps using 3D-Speaker models from ModelScope.",
+  "input-audio-file-for-speaker-diarization": "Input audio file for speaker diarization",
+  "pre-specified-number-of-speakers-optional-leave-empty-for-automa": "Pre-specified number of speakers (optional, leave empty for automatic detection)",
+  "enable-overlap-detection-for-overlapping-speech-segments": "Enable overlap detection for overlapping speech segments",
+  "output-format-for-diarization-results": "Output format for diarization results"
+}
