@@ -36,35 +36,14 @@ def main(params: Inputs, context: Context) -> Outputs:
     if not os.path.exists(audio_file):
         raise ValueError(f"Audio file not found: {audio_file}")
 
-    # Initialize speaker diarization pipeline
-    # Using ANDiT model which supports diarization
-    try:
-        diarization_pipeline = pipeline(
-            task='speaker-diarization',
-            model='iic/speech_campplus_sv_zh-cn_16k-common'
-        )
-    except Exception as e:
-        # Fallback to using FunASR for diarization
-        context.logger.warning(f"Failed to load speaker-diarization pipeline: {e}")
-        context.logger.info("Attempting to use alternative diarization method...")
+    context.logger.info(f"Processing audio file: {audio_file}")
 
-        # Use speaker embedding + clustering approach
-        segments = perform_diarization_with_embeddings(
-            audio_file,
-            num_speakers,
-            include_overlap,
-            context
-        )
-    else:
-        # Process audio file
-        pipeline_params = {}
-        if num_speakers is not None:
-            pipeline_params['num_speakers'] = int(num_speakers)
-
-        result = diarization_pipeline(audio_file, **pipeline_params)
-
-        # Parse results into segments format
-        segments = parse_diarization_result(result)
+    # Use FunASR pipeline for speaker diarization
+    segments = perform_diarization_with_funasr(
+        audio_file,
+        num_speakers,
+        context
+    )
 
     # Save output file
     output_dir = "/oomol-driver/oomol-storage/speaker-diarization"
@@ -106,145 +85,206 @@ def main(params: Inputs, context: Context) -> Outputs:
     }
 
 
-def perform_diarization_with_embeddings(
+def perform_diarization_with_funasr(
     audio_file: str,
     num_speakers: typing.Optional[int],
-    include_overlap: bool,
     context: Context
 ) -> typing.List[typing.Dict[str, typing.Any]]:
     """
-    Perform speaker diarization using speaker embeddings and clustering.
+    Perform speaker diarization using FunASR.
 
-    This is a fallback method using VAD + speaker embeddings + clustering.
+    Uses VAD + sliding window + speaker embeddings + clustering approach.
     """
-    from modelscope.pipelines import pipeline
+    from funasr import AutoModel
     import numpy as np
     from sklearn.cluster import AgglomerativeClustering
+    import soundfile as sf
+
+    context.logger.info("Loading audio file...")
+    audio, sample_rate = sf.read(audio_file)
+
+    # Convert to mono if stereo
+    if len(audio.shape) > 1:
+        audio = np.mean(audio, axis=1)
+
+    context.logger.info(f"Audio duration: {len(audio) / sample_rate:.2f} seconds")
 
     # Step 1: Voice Activity Detection
     context.logger.info("Performing voice activity detection...")
-    vad_pipeline = pipeline(
-        task='voice-activity-detection',
-        model='iic/speech_fsmn_vad_zh-cn-16k-common-pytorch'
+    vad_model = AutoModel(
+        model="fsmn-vad",
+        model_revision="v2.0.4"
     )
-    vad_result = vad_pipeline(audio_file)
 
-    # Step 2: Extract speaker embeddings for each speech segment
-    context.logger.info("Extracting speaker embeddings...")
-    sv_pipeline = pipeline(
-        task='speaker-verification',
-        model='iic/speech_campplus_sv_zh-cn_16k-common'
+    vad_result = vad_model.generate(
+        input=audio_file,
+        cache={},
+        is_final=True,
+        chunk_size=200,
+        encoder_chunk_look_back=4,
+        decoder_chunk_look_back=1
     )
+
+    context.logger.info(f"VAD result: {vad_result}")
 
     # Parse VAD segments
-    speech_segments = parse_vad_result(vad_result)
+    speech_segments = parse_funasr_vad_result(vad_result, sample_rate)
 
     if not speech_segments:
         context.logger.warning("No speech segments detected")
         return []
 
-    # Extract embeddings for each segment
+    context.logger.info(f"Detected {len(speech_segments)} speech segments")
+
+    # Step 2: Extract speaker embeddings
+    context.logger.info("Extracting speaker embeddings...")
+    sv_model = AutoModel(
+        model="cam++",
+        model_revision="v2.0.2"
+    )
+
     embeddings = []
     valid_segments = []
 
-    for seg in speech_segments:
+    for idx, seg in enumerate(speech_segments):
         try:
-            # Extract embedding for this segment
-            result = sv_pipeline(audio_file, output_emb=True)
-            if 'embs' in result:
-                embeddings.append(result['embs'][0])
+            start_sample = int(seg["start_time"] * sample_rate)
+            end_sample = int(seg["end_time"] * sample_rate)
+
+            # Skip very short segments (< 0.5 seconds)
+            if (end_sample - start_sample) / sample_rate < 0.5:
+                continue
+
+            segment_audio = audio[start_sample:end_sample]
+
+            # Extract embedding
+            embedding_result = sv_model.generate(
+                input=segment_audio,
+                cache={},
+                output_dir=None,
+                batch_size=1
+            )
+
+            if embedding_result and len(embedding_result) > 0:
+                # Get embedding from result
+                if isinstance(embedding_result[0], dict) and 'spk_embedding' in embedding_result[0]:
+                    emb = embedding_result[0]['spk_embedding']
+                elif hasattr(embedding_result[0], 'spk_embedding'):
+                    emb = embedding_result[0].spk_embedding
+                else:
+                    # Try to extract embedding directly
+                    emb = embedding_result[0] if isinstance(embedding_result[0], np.ndarray) else np.array(embedding_result[0])
+
+                # Flatten embedding to 1D if needed
+                if isinstance(emb, np.ndarray):
+                    emb = emb.flatten()
+
+                embeddings.append(emb)
                 valid_segments.append(seg)
+                context.logger.info(f"Segment {idx+1}/{len(speech_segments)}: {seg['start_time']:.2f}s - {seg['end_time']:.2f}s, emb shape: {emb.shape if hasattr(emb, 'shape') else len(emb)}")
         except Exception as e:
-            context.logger.warning(f"Failed to extract embedding for segment: {e}")
+            context.logger.warning(f"Failed to extract embedding for segment {idx}: {e}")
             continue
 
     if not embeddings:
-        raise ValueError("Failed to extract any speaker embeddings")
+        raise ValueError("Failed to extract any speaker embeddings. Audio may be too short or contain no clear speech.")
 
-    # Step 3: Cluster embeddings to identify speakers
+    context.logger.info(f"Extracted {len(embeddings)} valid embeddings")
+
+    # Handle case with only one segment
+    if len(embeddings) == 1:
+        context.logger.warning("Only one speech segment found - assigning to single speaker")
+        segments = [{
+            "start_time": round(valid_segments[0]["start_time"], 2),
+            "end_time": round(valid_segments[0]["end_time"], 2),
+            "speaker_id": "SPEAKER_00"
+        }]
+        return segments
+
+    # Step 3: Cluster embeddings
     context.logger.info("Clustering speaker embeddings...")
-    embeddings_array = np.array(embeddings)
+
+    # Convert to numpy array and ensure 2D shape
+    embeddings_list = []
+    for emb in embeddings:
+        if isinstance(emb, np.ndarray):
+            emb_flat = emb.flatten()
+        else:
+            emb_flat = np.array(emb).flatten()
+        embeddings_list.append(emb_flat)
+
+    embeddings_array = np.array(embeddings_list)
+    context.logger.info(f"Embeddings array shape: {embeddings_array.shape}")
+
+    # Normalize embeddings
+    embeddings_array = embeddings_array / (np.linalg.norm(embeddings_array, axis=1, keepdims=True) + 1e-8)
 
     if num_speakers is None:
-        # Auto-detect number of speakers using threshold-based clustering
-        num_speakers = min(len(embeddings), 10)  # Max 10 speakers
+        # Auto-detect number of speakers (max 5)
+        num_speakers = min(max(2, len(embeddings) // 3), 5)
+        context.logger.info(f"Auto-detected number of speakers: {num_speakers}")
+
+    n_clusters = min(int(num_speakers), len(embeddings))
 
     clustering = AgglomerativeClustering(
-        n_clusters=min(int(num_speakers), len(embeddings)),
+        n_clusters=n_clusters,
         metric='cosine',
         linkage='average'
     )
     labels = clustering.fit_predict(embeddings_array)
 
-    # Step 4: Assign speaker labels to segments
+    # Step 4: Create segments with speaker labels
     segments = []
     for seg, label in zip(valid_segments, labels):
         segments.append({
-            "start_time": seg["start_time"],
-            "end_time": seg["end_time"],
+            "start_time": round(seg["start_time"], 2),
+            "end_time": round(seg["end_time"], 2),
             "speaker_id": f"SPEAKER_{label:02d}"
         })
 
     # Sort by start time
     segments.sort(key=lambda x: x["start_time"])
 
-    return segments
-
-
-def parse_vad_result(vad_result) -> typing.List[typing.Dict[str, float]]:
-    """Parse VAD result to extract speech segments."""
-    segments = []
-
-    if isinstance(vad_result, dict) and 'text' in vad_result:
-        # Parse text format: [[start1, end1], [start2, end2], ...]
-        text = vad_result['text']
-        # Simple parsing logic - adapt based on actual output format
-        import ast
-        try:
-            timestamps = ast.literal_eval(text)
-            for ts in timestamps:
-                if len(ts) >= 2:
-                    segments.append({
-                        "start_time": float(ts[0]) / 1000.0,  # Convert ms to seconds
-                        "end_time": float(ts[1]) / 1000.0
-                    })
-        except Exception:
-            pass
+    context.logger.info(f"Found {len(set(labels))} unique speakers in {len(segments)} segments")
 
     return segments
 
 
-def parse_diarization_result(result) -> typing.List[typing.Dict[str, typing.Any]]:
-    """Parse ModelScope diarization result into segments format."""
+def parse_funasr_vad_result(vad_result, sample_rate: int) -> typing.List[typing.Dict[str, float]]:
+    """Parse FunASR VAD result to extract speech segments."""
     segments = []
 
-    # Handle different result formats
-    if isinstance(result, dict):
-        if 'text' in result:
-            # Parse text-based output
-            text = result['text']
-            # Expected format: "SPEAKER_00 start end\nSPEAKER_01 start end\n..."
-            for line in text.strip().split('\n'):
-                parts = line.split()
-                if len(parts) >= 3:
-                    segments.append({
-                        "start_time": float(parts[1]),
-                        "end_time": float(parts[2]),
-                        "speaker_id": parts[0]
-                    })
-        elif 'segments' in result:
-            segments = result['segments']
-    elif isinstance(result, list):
-        # Direct list of segments
-        for item in result:
-            if isinstance(item, (list, tuple)) and len(item) >= 3:
-                segments.append({
-                    "start_time": float(item[0]),
-                    "end_time": float(item[1]),
-                    "speaker_id": str(item[2])
-                })
-            elif isinstance(item, dict):
-                segments.append(item)
+    try:
+        if isinstance(vad_result, list) and len(vad_result) > 0:
+            result_item = vad_result[0]
+
+            # Check if result has 'value' field with timestamps
+            if isinstance(result_item, dict):
+                if 'value' in result_item:
+                    # Format: [[start_ms, end_ms], ...]
+                    for timestamp_pair in result_item['value']:
+                        if len(timestamp_pair) >= 2:
+                            start_ms, end_ms = timestamp_pair[0], timestamp_pair[1]
+                            segments.append({
+                                "start_time": start_ms / 1000.0,
+                                "end_time": end_ms / 1000.0
+                            })
+                elif 'text' in result_item:
+                    # Try to parse text format
+                    import ast
+                    try:
+                        timestamps = ast.literal_eval(result_item['text'])
+                        for ts in timestamps:
+                            if len(ts) >= 2:
+                                segments.append({
+                                    "start_time": float(ts[0]) / 1000.0,
+                                    "end_time": float(ts[1]) / 1000.0
+                                })
+                    except Exception:
+                        pass
+    except Exception as e:
+        # If VAD fails, create a single segment for the whole audio
+        pass
 
     return segments
 

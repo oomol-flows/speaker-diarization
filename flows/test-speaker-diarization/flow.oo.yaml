@@ -1,11 +1,10 @@
-title: "%test-speaker-diarization%"
+title: "Test Speaker Diarization"
 nodes:
   - node_id: speaker-diarization#1
     task: self::speaker-diarization
     inputs_from:
       - handle: audio_file
-        value: "/oomol-driver/oomol-storage/speech_separation_output/mix_speech1_speake\
-          r1.wav"
+        value: /oomol-driver/oomol-storage/Area22211_audio.mp3
       - handle: num_speakers
         value: null
       - handle: include_overlap

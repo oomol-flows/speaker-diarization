@@ -4,7 +4,9 @@
       "Bash(poetry add:*)",
       "Bash(poetry install:*)",
       "Bash(apt-get:*)",
-      "Bash(apt-get install:*)"
+      "Bash(apt-get install:*)",
+      "Read(//oomol-driver/oomol-storage/speaker-diarization/**)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
