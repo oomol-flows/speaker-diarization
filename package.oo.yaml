@@ -1,0 +1,7 @@
+version: 0.0.1
+scripts:
+  bootstrap: |
+    apt-get update && apt-get install -y ffmpeg
+    npm install
+    poetry install --no-root
+icon: ./icon.png

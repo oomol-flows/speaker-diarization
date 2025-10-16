@@ -1,0 +1,14 @@
+title: Test Speaker Diarization
+nodes:
+  - node_id: speaker-diarization#1
+    task: self::speaker-diarization
+    inputs_from:
+      - handle: audio_file
+        value: "/oomol-driver/oomol-storage/speech_separation_output/mix_speech1_speake\
+          r1.wav"
+      - handle: num_speakers
+        value: null
+      - handle: include_overlap
+        value: false
+      - handle: output_format
+        value: "json"

@@ -1,0 +1,70 @@
+inputs_def:
+  - handle: audio_file
+    json_schema:
+      type: string
+      ui:
+        widget: file
+        options:
+          filters:
+            - name: Audio Files
+              extensions:
+                - wav
+                - mp3
+                - flac
+                - m4a
+    description: "Input audio file for speaker diarization"
+    nullable: false
+
+  - handle: num_speakers
+    json_schema:
+      type: number
+    description: "Pre-specified number of speakers (optional, leave empty for automatic detection)"
+    nullable: true
+    value: null
+
+  - handle: include_overlap
+    json_schema:
+      type: boolean
+    description: "Enable overlap detection for overlapping speech segments"
+    nullable: false
+    value: false
+
+  - handle: output_format
+    json_schema:
+      type: string
+      enum:
+        - json
+        - rttm
+    description: "Output format for diarization results"
+    nullable: false
+    value: "json"
+
+outputs_def:
+  - handle: segments
+    description: "Speaker segments with timestamps and speaker IDs"
+    json_schema:
+      type: array
+      items:
+        type: object
+        properties:
+          start_time:
+            type: number
+          end_time:
+            type: number
+          speaker_id:
+            type: string
+
+  - handle: output_file
+    description: "Path to the saved diarization output file"
+    json_schema:
+      type: string
+
+executor:
+  name: python
+  options:
+    entry: __init__.py
+    spawn: false
+
+title: "Speaker Diarization"
+icon: ":carbon:user-speaker:"
+description: "This block performs speaker diarization on audio files, identifying and labeling different speakers with timestamps using 3D-Speaker models from ModelScope."

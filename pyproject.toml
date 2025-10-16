@@ -1,0 +1,32 @@
+[project]
+name = "pyannote"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "alwaysmavs",email = "beingswu@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "modelscope (>=1.31.0,<2.0.0)",
+    "funasr (>=1.2.7,<2.0.0)",
+    "scikit-learn (>=1.7.2,<2.0.0)",
+    "addict (>=2.4.0,<3.0.0)",
+    "onnxruntime (>=1.23.1,<2.0.0)",
+    "datasets (<4.0.0) ; python_version >= \"3.10\" and python_version < \"4.0\"",
+    "transformers (>=4.57.1,<5.0.0)",
+    "torch (>=2.9.0,<3.0.0)",
+    "torchaudio (>=2.9.0,<3.0.0)",
+    "pillow (>=12.0.0,<13.0.0)",
+    "opencv-python (>=4.12.0.88,<5.0.0.0)",
+    "sortedcontainers (>=2.4.0,<3.0.0)"
+]
+
+[tool.poetry]
+package-mode = false
+packages = [{include = "pyannote", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
