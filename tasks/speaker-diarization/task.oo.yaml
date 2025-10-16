@@ -3,30 +3,21 @@ inputs_def:
     description: "%input-audio-file-for-speaker-diarization%"
     json_schema:
       type: string
-      ui:
-        widget: file
-        options:
-          filters:
-            - name: Audio Files
-              extensions:
-                - wav
-                - mp3
-                - flac
-                - m4a
+      ui:widget: file
     nullable: false
 
   - handle: num_speakers
     description: "%pre-specified-number-of-speakers-optional-leave-empty-for-automa%"
     json_schema:
       type: number
-    value: null
+    value:
     nullable: true
 
   - handle: include_overlap
     description: "%enable-overlap-detection-for-overlapping-speech-segments%"
     json_schema:
       type: boolean
-    value: false
+    value: true
     nullable: false
 
   - handle: output_format
@@ -36,7 +27,7 @@ inputs_def:
       enum:
         - json
         - rttm
-    value: "json"
+    value: json
     nullable: false
 
 outputs_def:
@@ -68,3 +59,5 @@ executor:
 title: "%speaker-diarization2%"
 icon: ":carbon:user-speaker:"
 description: "%this-block-performs-speaker-diarization-on-audio-files-identifyi%"
+ui:
+  default_width: 514.3052326019748
